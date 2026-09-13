@@ -19,3 +19,8 @@ data class StepEngineState(
     val sensorPresent: Boolean = true,
     val activityRecognitionAvailable: Boolean = true
 )
+
+data class SettingsUiState(
+    val dailyStepGoal: Int =  10000,
+    val notificationEnabled: Boolean = true
+)

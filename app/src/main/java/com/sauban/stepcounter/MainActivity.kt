@@ -9,6 +9,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -50,6 +51,7 @@ import kotlin.math.max
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
             StepCounterTheme {
@@ -59,59 +61,80 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen() {
+    val context = LocalContext.current
     val navController = rememberNavController()
     val viewModel: StepViewModel = viewModel()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
+
+    val settingsRepository = remember { com.sauban.stepcounter.data.SettingsRepository(context) }
+    val settingsViewModel: com.sauban.stepcounter.viewmodel.SettingsViewModel = viewModel(
+        factory = com.sauban.stepcounter.viewmodel.SettingsViewModelFactory(settingsRepository)
+    )
+
     val currentRoute = navBackStackEntry?.destination?.route
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        containerColor = Color(0xFF121212),
+        topBar = {
+            if (currentRoute != "settings") {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = if (currentRoute == "home") "Step Counter" else "History",
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    actions = {
+                        IconButton(onClick = { navController.navigate("settings") }) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Settings"
+                            )
+                        }
+                    }
+                )
+            }
+        },
         bottomBar = {
-            NavigationBar(
-                containerColor = Color(0xFF1E1E1E),
-                contentColor = Color.White
-            ) {
-                NavigationBarItem(
-                    selected = currentRoute == "home",
-                    onClick = {
-                        navController.navigate("home") {
-                            popUpTo(navController.graph.startDestinationId) {
-                                saveState = true
+            if (currentRoute != "settings") {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = currentRoute == "home",
+                        onClick = {
+                            navController.navigate("home") {
+                                popUpTo(navController.graph.startDestinationId) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
                             }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    icon = { Icon(Icons.AutoMirrored.Filled.DirectionsRun, contentDescription = "Home") },
-                    label = { Text("Tracker") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = Color(0xFF64FFDA),
-                        unselectedIconColor = Color.Gray,
-                        indicatorColor = Color(0xFF00BFA5).copy(alpha = 0.2f)
+                        },
+                        icon = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.DirectionsRun,
+                                contentDescription = "Home"
+                            )
+                        },
+                        label = { Text("Tracker") }
                     )
-                )
-                NavigationBarItem(
-                    selected = currentRoute == "history",
-                    onClick = {
-                        navController.navigate("history") {
-                            popUpTo(navController.graph.startDestinationId) {
-                                saveState = true
+                    NavigationBarItem(
+                        selected = currentRoute == "history",
+                        onClick = {
+                            navController.navigate("history") {
+                                popUpTo(navController.graph.startDestinationId) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
                             }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    icon = { Icon(Icons.Default.BarChart, contentDescription = "History") },
-                    label = { Text("History") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = Color(0xFF64FFDA),
-                        unselectedIconColor = Color.Gray,
-                        indicatorColor = Color(0xFF00BFA5).copy(alpha = 0.2f)
+                        },
+                        icon = { Icon(Icons.Default.BarChart, contentDescription = "History") },
+                        label = { Text("History") }
                     )
-                )
+                }
             }
         }
     ) { innerPadding ->
@@ -125,6 +148,12 @@ fun MainScreen() {
             }
             composable("history") {
                 HistoryScreen(viewModel = viewModel)
+            }
+            composable("settings") {
+                SettingsScreen(
+                    onBackClick = { navController.popBackStack() },
+                    viewModel = settingsViewModel
+                )
             }
         }
     }
@@ -180,25 +209,13 @@ fun HybridStepScreen(modifier: Modifier = Modifier, viewModel: StepViewModel) {
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "Hybrid Step Counter",
-            style = MaterialTheme.typography.titleMedium.copy(
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp)
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
         when {
             !uiState.sensorPresent -> {
                 WarningCard(
                     icon = Icons.Default.Error,
-                    iconTint = Color(0xFFEF5350),
-                    background = Color(0xFFD32F2F).copy(alpha = 0.2f),
+                    iconTint = MaterialTheme.colorScheme.error,
+                    background = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
                     text = "Hardware step sensor not found on this device."
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -206,8 +223,9 @@ fun HybridStepScreen(modifier: Modifier = Modifier, viewModel: StepViewModel) {
             !uiState.activityRecognitionAvailable -> {
                 WarningCard(
                     icon = Icons.Default.Warning,
-                    iconTint = Color(0xFFFFCA28),
-                    background = Color(0xFFF9A825).copy(alpha = 0.15f),
+                    iconTint = MaterialTheme.colorScheme.tertiary,
+                    background = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                     text = "Activity Recognition unavailable — counting raw hardware steps."
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -221,14 +239,14 @@ fun HybridStepScreen(modifier: Modifier = Modifier, viewModel: StepViewModel) {
             text = "${uiState.sessionSteps}",
             fontSize = 90.sp,
             fontWeight = FontWeight.Black,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onBackground,
             letterSpacing = (-2).sp
         )
         Text(
             text = "SESSION STEPS",
             fontSize = 16.sp,
             letterSpacing = 4.sp,
-            color = Color.Gray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.Bold
         )
 
@@ -237,14 +255,14 @@ fun HybridStepScreen(modifier: Modifier = Modifier, viewModel: StepViewModel) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, Color(0xFF00BFA5).copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
-            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.54f)),
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp)),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
             shape = RoundedCornerShape(12.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     text = "HOW THIS COUNTS",
-                    color = Color(0xFF64FFDA),
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp
                 )
@@ -255,14 +273,14 @@ fun HybridStepScreen(modifier: Modifier = Modifier, viewModel: StepViewModel) {
                             "• Filtered while Still or In Vehicle.",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
-                    color = Color.White.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = "Status: ${uiState.statusMessage}",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
-                    color = Color(0xFFFFD54F)
+                    color = MaterialTheme.colorScheme.tertiary
                 )
             }
         }
@@ -271,10 +289,6 @@ fun HybridStepScreen(modifier: Modifier = Modifier, viewModel: StepViewModel) {
 
         Button(
             onClick = { viewModel.resetSession() },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF00897B),
-                contentColor = Color.White
-            ),
             shape = RoundedCornerShape(30.dp),
             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
         ) {
@@ -302,13 +316,11 @@ fun HistoryScreen(viewModel: StepViewModel) {
 
     val isSelectionMode = selectedSessions.isNotEmpty()
 
-    // fixed: avg calculation
     val (averageSteps24h, totalStepsStr) = remember(history) {
         if (history.isEmpty()) return@remember "0" to "0"
 
         val totalSteps = history.sumOf { it.steps.toLong() }
 
-        // distinct calendar dates
         val dayFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val uniqueCalendarDaysCount = history
             .map { dayFormatter.format(Date(it.endTime)) }
@@ -339,11 +351,15 @@ fun HistoryScreen(viewModel: StepViewModel) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { selectedSessions = emptySet() }) {
-                        Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White)
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Cancel",
+                            tint = MaterialTheme.colorScheme.onBackground
+                        )
                     }
                     Text(
                         text = "${selectedSessions.size} Selected",
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onBackground,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
                     )
@@ -356,8 +372,7 @@ fun HistoryScreen(viewModel: StepViewModel) {
                         }
                     ) {
                         Text(
-                            text = if (selectedSessions.size == history.size) "Deselect All" else "Select All",
-                            color = Color(0xFF64FFDA)
+                            text = if (selectedSessions.size == history.size) "Deselect All" else "Select All"
                         )
                     }
 
@@ -369,7 +384,11 @@ fun HistoryScreen(viewModel: StepViewModel) {
                             selectedSessions = emptySet()
                         }
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete Selected", tint = Color(0xFFEF5350))
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete Selected",
+                            tint = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }
@@ -377,7 +396,7 @@ fun HistoryScreen(viewModel: StepViewModel) {
             Text(
                 text = "Activity History",
                 style = MaterialTheme.typography.titleMedium.copy(
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.Bold
                 ),
                 modifier = Modifier.padding(vertical = 12.dp)
@@ -402,7 +421,7 @@ fun HistoryScreen(viewModel: StepViewModel) {
         if (history.isNotEmpty()) {
             Text(
                 text = "RECENT TREND",
-                color = Color.Gray,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp
@@ -415,7 +434,7 @@ fun HistoryScreen(viewModel: StepViewModel) {
 
         Text(
             text = "PREVIOUS SESSIONS",
-            color = Color.Gray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 2.sp
@@ -425,7 +444,7 @@ fun HistoryScreen(viewModel: StepViewModel) {
         if (history.isEmpty()) {
             Text(
                 text = "No history recorded yet.\nPress 'Reset Session' to save your first record.",
-                color = Color.Gray,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 20.dp)
             )
         } else {
@@ -457,7 +476,7 @@ fun HistoryScreen(viewModel: StepViewModel) {
 fun StatCard(title: String, value: String, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier.height(100.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(
@@ -466,9 +485,19 @@ fun StatCard(title: String, value: String, modifier: Modifier = Modifier) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.Center
         ) {
-            Text(text = title, color = Color(0xFF00BFA5), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(
+                text = title,
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(text = value, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+            Text(
+                text = value,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Black
+            )
         }
     }
 }
@@ -481,7 +510,7 @@ fun SessionGraph(sessions: List<StepSession>) {
         modifier = Modifier
             .fillMaxWidth()
             .height(160.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
@@ -493,12 +522,18 @@ fun SessionGraph(sessions: List<StepSession>) {
         ) {
             sessions.forEach { session ->
                 val heightPercentage = (session.steps.toFloat() / maxSteps).coerceIn(0f, 1f)
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Bottom
+                ) {
                     Box(
                         modifier = Modifier
                             .width(20.dp)
                             .fillMaxHeight(heightPercentage)
-                            .background(Color(0xFF64FFDA), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                            .background(
+                                MaterialTheme.colorScheme.primary,
+                                RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                            )
                     )
                 }
             }
@@ -537,7 +572,11 @@ fun SessionHistoryItem(
                 }
             ),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) Color(0xFF264653) else Color(0xFF1E1E1E)
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainer
+            }
         ),
         shape = RoundedCornerShape(12.dp)
     ) {
@@ -552,26 +591,31 @@ fun SessionHistoryItem(
                 if (isSelectionMode) {
                     Checkbox(
                         checked = isSelected,
-                        onCheckedChange = { onToggleSelect() },
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = Color(0xFF64FFDA),
-                            checkmarkColor = Color.Black
-                        )
+                        onCheckedChange = { onToggleSelect() }
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
 
                 Column {
-                    Text(text = dateStr, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(
+                        text = dateStr,
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(text = "$startTimeStr - $endTimeStr", color = Color.Gray, fontSize = 12.sp)
+                    Text(
+                        text = "$startTimeStr - $endTimeStr",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
                 }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "${session.steps}",
-                    color = Color(0xFF64FFDA),
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Black,
                     fontSize = 22.sp
                 )
@@ -581,7 +625,7 @@ fun SessionHistoryItem(
                         Icon(
                             imageVector = Icons.Default.Delete,
                             contentDescription = "Delete Session",
-                            tint = Color.Gray.copy(alpha = 0.6f)
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -595,10 +639,14 @@ private fun WarningCard(
     icon: ImageVector,
     iconTint: Color,
     background: Color,
+    contentColor: Color,
     text: String
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = background),
+        colors = CardDefaults.cardColors(
+            containerColor = background,
+            contentColor = contentColor
+        ),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -607,7 +655,7 @@ private fun WarningCard(
         ) {
             Icon(imageVector = icon, contentDescription = null, tint = iconTint)
             Spacer(modifier = Modifier.width(12.dp))
-            Text(text = text, color = Color.White, fontSize = 13.sp)
+            Text(text = text, fontSize = 13.sp)
         }
     }
 }
@@ -615,16 +663,24 @@ private fun WarningCard(
 @Composable
 private fun ActivityBadge(label: String, granted: Boolean) {
     val (bg, fg, icon) = when {
-        !granted -> Triple(Color.Gray.copy(alpha = 0.2f), Color.Gray, Icons.Default.Warning)
+        !granted -> Triple(
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.onSurfaceVariant,
+            Icons.Default.Warning
+        )
         label == "Running" -> Triple(
-            Color(0xFF00BFA5).copy(alpha = 0.2f), Color(0xFF64FFDA),
+            MaterialTheme.colorScheme.primaryContainer,
+            MaterialTheme.colorScheme.primary,
             Icons.AutoMirrored.Filled.DirectionsRun
         )
         label == "Walking" || label == "On Foot" -> Triple(
-            Color(0xFF00BFA5).copy(alpha = 0.2f), Color(0xFF64FFDA),
+            MaterialTheme.colorScheme.primaryContainer,
+            MaterialTheme.colorScheme.primary,
             Icons.AutoMirrored.Filled.DirectionsWalk
         )
-        else -> Triple(Color.Gray.copy(alpha = 0.2f), Color.Gray,
+        else -> Triple(
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.onSurfaceVariant,
             Icons.AutoMirrored.Filled.DirectionsWalk
         )
     }
