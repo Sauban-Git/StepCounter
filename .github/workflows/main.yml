@@ -35,15 +35,19 @@ jobs:
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
-          echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/app/release-key.p12"
-          chmod 600 "$RUNNER_TEMP/app/release-key.p12"
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$GITHUB_WORKSPACE/app/release-key.p12"
+          chmod 600 "$GITHUB_WORKSPACE/app/release-key.p12"
+
+      - name: Verify release keystore
+        run: |
+          ls -l "$GITHUB_WORKSPACE/app/release-key.p12"
+          test -f "$GITHUB_WORKSPACE/app/release-key.p12"
 
       - name: Build signed release APK
         env:
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-          RELEASE_STORE_TYPE: PKCS12
         run: |
           ./gradlew assembleRelease
 
@@ -74,4 +78,4 @@ jobs:
       - name: Delete release keystore
         if: always()
         run: |
-          rm -f "$RUNNER_TEMP/release-key.p12"
+          rm -f "$GITHUB_WORKSPACE/app/release-key.p12"
