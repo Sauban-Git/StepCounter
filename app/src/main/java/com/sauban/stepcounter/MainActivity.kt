@@ -69,18 +69,34 @@ fun MainScreen() {
 
     val currentRoute = navBackStackEntry?.destination?.route
 
+    val titleText = when (currentRoute) {
+        "history" -> "History"
+        "settings" -> "Preferences"
+        else -> "Step Counter"
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            if (currentRoute != "settings") {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = if (currentRoute == "home") "Step Counter" else "History",
-                            fontWeight = FontWeight.Bold
-                        )
-                    },
-                    actions = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = titleText,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    if (currentRoute == "settings") {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowBackIosNew,
+                                contentDescription = "Back"
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    if (currentRoute != "settings") {
                         IconButton(onClick = { navController.navigate("settings") }) {
                             Icon(
                                 imageVector = Icons.Default.Settings,
@@ -88,8 +104,8 @@ fun MainScreen() {
                             )
                         }
                     }
-                )
-            }
+                }
+            )
         },
         bottomBar = {
             if (currentRoute != "settings") {
@@ -143,10 +159,7 @@ fun MainScreen() {
                 HistoryScreen(viewModel = viewModel)
             }
             composable("settings") {
-                SettingsScreen(
-                    onBackClick = { navController.popBackStack() },
-                    viewModel = settingsViewModel
-                )
+                SettingsScreen(viewModel = settingsViewModel)
             }
         }
     }

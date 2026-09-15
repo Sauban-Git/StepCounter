@@ -27,6 +27,7 @@ import com.sauban.stepcounter.viewmodel.StepViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.max
+import androidx.compose.ui.platform.LocalLocale
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -315,34 +316,71 @@ fun StatCard(title: String, value: String, modifier: Modifier = Modifier) {
 fun SessionGraph(sessions: List<StepSession>) {
     val maxSteps = max(sessions.maxOfOrNull { it.steps } ?: 1, 100)
 
+    val dateFormatter = SimpleDateFormat("MMM dd", LocalLocale.current.platformLocale)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(160.dp),
+            .height(180.dp), // Increased slightly to give space for X-axis labels
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(horizontal = 12.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.Bottom
         ) {
             sessions.forEach { session ->
-                val heightPercentage = (session.steps.toFloat() / maxSteps).coerceIn(0f, 1f)
+                val heightPercentage = (session.steps.toFloat() / maxSteps).coerceIn(0.04f, 1f)
+
                 Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Bottom
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
-                            .width(20.dp)
-                            .fillMaxHeight(heightPercentage)
-                            .background(
-                                MaterialTheme.colorScheme.primary,
-                                RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
-                            )
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.BottomCenter
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(16.dp)
+                                .fillMaxHeight()
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                                    RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                                )
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(16.dp)
+                                .fillMaxHeight(heightPercentage)
+                                .background(
+                                    MaterialTheme.colorScheme.primary,
+                                    RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                                )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val labelText = try {
+                        dateFormatter.format(Date(session.startTime))
+                    } catch (_: Exception) {
+                        ""
+                    }
+
+                    Text(
+                        text = labelText,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
                     )
                 }
             }
