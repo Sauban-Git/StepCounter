@@ -17,7 +17,8 @@ data class StepEngineState(
     val statusMessage: String = "",
     val activityLabel: String = "Waiting...",
     val sensorPresent: Boolean = true,
-    val activityRecognitionAvailable: Boolean = true
+    val activityRecognitionAvailable: Boolean = true,
+    val isPaused: Boolean = false
 )
 
 data class SettingsUiState(

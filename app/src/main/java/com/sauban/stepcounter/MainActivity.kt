@@ -11,13 +11,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -42,12 +39,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.sauban.stepcounter.data.StepSession
 import com.sauban.stepcounter.ui.theme.StepCounterTheme
 import com.sauban.stepcounter.viewmodel.StepViewModel
-import java.text.SimpleDateFormat
-import java.util.*
-import kotlin.math.max
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -165,6 +158,8 @@ fun HybridStepScreen(modifier: Modifier = Modifier, viewModel: StepViewModel) {
     val uiState = viewModel.uiState
     var permissionsGranted by remember { mutableStateOf(false) }
 
+    var isPaused = uiState.isPaused
+
     val permissionsList = remember {
         mutableListOf<String>().apply {
             add(Manifest.permission.ACTIVITY_RECOGNITION)
@@ -276,8 +271,8 @@ fun HybridStepScreen(modifier: Modifier = Modifier, viewModel: StepViewModel) {
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "Status: ${uiState.statusMessage}",
+                Text (
+                    text = "Status: ${if (isPaused) "Paused" else uiState.statusMessage}",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.tertiary
@@ -287,14 +282,44 @@ fun HybridStepScreen(modifier: Modifier = Modifier, viewModel: StepViewModel) {
 
         Spacer(modifier = Modifier.height(30.dp))
 
-        Button(
-            onClick = { viewModel.resetSession() },
-            shape = RoundedCornerShape(30.dp),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "RESET & SAVE SESSION", fontWeight = FontWeight.Bold)
+            // Play / Pause Button
+            Button(
+                onClick = {
+                    isPaused = !isPaused
+                    viewModel.togglePauseResume()
+                },
+                shape = RoundedCornerShape(30.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isPaused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = if (isPaused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                ),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
+            ) {
+                Icon(
+                    imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                    contentDescription = if (isPaused) "Play" else "Pause"
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isPaused) "RESUME" else "PAUSE",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            OutlinedButton(
+                onClick = { viewModel.resetSession() },
+                shape = RoundedCornerShape(30.dp),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
+            ) {
+                Icon(imageVector = Icons.Default.RestartAlt, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = "SAVE & RESET", fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -302,336 +327,6 @@ fun HybridStepScreen(modifier: Modifier = Modifier, viewModel: StepViewModel) {
 private fun startStepService(context: Context) {
     val serviceIntent = Intent(context, StepCounterService::class.java)
     ContextCompat.startForegroundService(context, serviceIntent)
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun HistoryScreen(viewModel: StepViewModel) {
-    val history by viewModel.historySessions.collectAsState()
-    var selectedSessions by remember { mutableStateOf(setOf<StepSession>()) }
-
-    LaunchedEffect(history) {
-        selectedSessions = selectedSessions.filter { it in history }.toSet()
-    }
-
-    val isSelectionMode = selectedSessions.isNotEmpty()
-
-    val (averageSteps24h, totalStepsStr) = remember(history) {
-        if (history.isEmpty()) return@remember "0" to "0"
-
-        val totalSteps = history.sumOf { it.steps.toLong() }
-
-        val dayFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val uniqueCalendarDaysCount = history
-            .map { dayFormatter.format(Date(it.endTime)) }
-            .toSet()
-            .size
-
-        val dailyAvg = if (uniqueCalendarDaysCount > 0) {
-            (totalSteps / uniqueCalendarDaysCount).toInt()
-        } else {
-            0
-        }
-
-        dailyAvg.toString() to totalSteps.toString()
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        if (isSelectionMode) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { selectedSessions = emptySet() }) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Cancel",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                    Text(
-                        text = "${selectedSessions.size} Selected",
-                        color = MaterialTheme.colorScheme.onBackground,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(
-                        onClick = {
-                            selectedSessions = if (selectedSessions.size == history.size) emptySet() else history.toSet()
-                        }
-                    ) {
-                        Text(
-                            text = if (selectedSessions.size == history.size) "Deselect All" else "Select All"
-                        )
-                    }
-
-                    IconButton(
-                        onClick = {
-                            selectedSessions.forEach { session ->
-                                viewModel.deleteSession(session)
-                            }
-                            selectedSessions = emptySet()
-                        }
-                    ) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete Selected",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-            }
-        } else {
-            Text(
-                text = "Activity History",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.Bold
-                ),
-                modifier = Modifier.padding(vertical = 12.dp)
-            )
-        }
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard(
-                title = "DAILY AVG",
-                value = averageSteps24h,
-                modifier = Modifier.weight(1f)
-            )
-            StatCard(
-                title = "TOTAL STEPS",
-                value = totalStepsStr,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        if (history.isNotEmpty()) {
-            Text(
-                text = "RECENT TREND",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            SessionGraph(sessions = history.take(7).reversed())
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "PREVIOUS SESSIONS",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 2.sp
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (history.isEmpty()) {
-            Text(
-                text = "No history recorded yet.\nPress 'Reset Session' to save your first record.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 20.dp)
-            )
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(history, key = { it.startTime }) { session ->
-                    val isSelected = selectedSessions.contains(session)
-                    SessionHistoryItem(
-                        session = session,
-                        isSelected = isSelected,
-                        isSelectionMode = isSelectionMode,
-                        onToggleSelect = {
-                            selectedSessions = if (isSelected) {
-                                selectedSessions - session
-                            } else {
-                                selectedSessions + session
-                            }
-                        },
-                        onDelete = {
-                            viewModel.deleteSession(session)
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun StatCard(title: String, value: String, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier.height(100.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = title,
-                color = MaterialTheme.colorScheme.primary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = value,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Black
-            )
-        }
-    }
-}
-
-@Composable
-fun SessionGraph(sessions: List<StepSession>) {
-    val maxSteps = max(sessions.maxOfOrNull { it.steps } ?: 1, 100)
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(160.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.Bottom
-        ) {
-            sessions.forEach { session ->
-                val heightPercentage = (session.steps.toFloat() / maxSteps).coerceIn(0f, 1f)
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Bottom
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(20.dp)
-                            .fillMaxHeight(heightPercentage)
-                            .background(
-                                MaterialTheme.colorScheme.primary,
-                                RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
-                            )
-                    )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun SessionHistoryItem(
-    session: StepSession,
-    isSelected: Boolean = false,
-    isSelectionMode: Boolean = false,
-    onToggleSelect: () -> Unit = {},
-    onDelete: () -> Unit = {}
-) {
-    val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
-    val timeFormat = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
-
-    val dateStr = remember(session.endTime) { dateFormat.format(Date(session.endTime)) }
-    val startTimeStr = remember(session.startTime) { timeFormat.format(Date(session.startTime)) }
-    val endTimeStr = remember(session.endTime) { timeFormat.format(Date(session.endTime)) }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .combinedClickable(
-                onClick = {
-                    if (isSelectionMode) {
-                        onToggleSelect()
-                    }
-                },
-                onLongClick = {
-                    onToggleSelect()
-                }
-            ),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainer
-            }
-        ),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isSelectionMode) {
-                    Checkbox(
-                        checked = isSelected,
-                        onCheckedChange = { onToggleSelect() }
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-
-                Column {
-                    Text(
-                        text = dateStr,
-                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "$startTimeStr - $endTimeStr",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp
-                    )
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "${session.steps}",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 22.sp
-                )
-
-                if (!isSelectionMode) {
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete Session",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
