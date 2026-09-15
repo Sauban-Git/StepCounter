@@ -1,5 +1,6 @@
 package com.sauban.stepcounter
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
@@ -9,45 +10,72 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import com.sauban.stepcounter.data.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class StepCounterService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val channelId = "step_counter_channel"
+    private val notificationId = 1
+    private lateinit var settingsRepository: SettingsRepository
 
     override fun onCreate() {
         super.onCreate()
-        startForegroundNotification("Step Counter Active", "Initializing steps...")
+
+        settingsRepository = SettingsRepository(applicationContext)
+        createNotificationChannel()
+        startForegroundNotification()
 
         StepEngineManager.start(this)
 
         serviceScope.launch {
-            StepEngineManager.state.collect { state ->
-                updateNotification("Steps: ${state.sessionSteps} • ${state.activityLabel}")
+            combine(
+                StepEngineManager.state,
+                settingsRepository.settingsState
+            ) {
+                engineState, settings ->
+                Pair(engineState, settings)
+            }.collect { (engineState, settings) ->
+                val statusPrefix = if (engineState.isPaused) "[PAUSED]" else ""
+                val content = if (settings.notificationEnabled) {
+                    "${statusPrefix}Steps: ${engineState.sessionSteps} / ${settings.dailyStepGoal} • ${engineState.activityLabel}"
+                } else {
+                    "${statusPrefix}Step counter running in background"
+                }
+                updateNotification(content)
             }
+
         }
     }
 
-    private fun startForegroundNotification(title: String, content: String) {
+    private fun createNotificationChannel() {
         val channel = NotificationChannel(
             channelId,
             "Background Step Counter",
             NotificationManager.IMPORTANCE_LOW
         )
         val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(channel)
+        manager?.createNotificationChannel(channel)
+    }
 
-        val notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle(title)
+    private fun buildNotification(content: String): Notification {
+        return NotificationCompat.Builder(this, channelId)
+            .setContentTitle("Step Counter Active")
             .setContentText(content)
-            .setSmallIcon(android.R.drawable.ic_menu_directions) // Ensure this icon exists or replace it
+            .setSmallIcon(android.R.drawable.ic_menu_directions)
             .setOngoing(true)
+            .setSilent(true)
             .build()
+    }
+
+    private fun startForegroundNotification() {
+        val notification = buildNotification("Initializing steps...")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             ServiceCompat.startForeground(
@@ -62,16 +90,10 @@ class StepCounterService : Service() {
     }
 
     private fun updateNotification(content: String) {
-        val notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Step Counter Active")
-            .setContentText(content)
-            .setSmallIcon(android.R.drawable.ic_menu_directions)
-            .setOngoing(true)
-            .setSilent(true)
-            .build()
+        val notification = buildNotification(content)
 
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(1, notification)
+        manager?.notify(notificationId, notification)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -83,6 +105,6 @@ class StepCounterService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
-        StepEngineManager.stop()
+        StepEngineManager.stop(this)
     }
 }

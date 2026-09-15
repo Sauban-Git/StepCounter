@@ -3,7 +3,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
-
 android {
     namespace = "com.sauban.stepcounter"
     compileSdk = 37

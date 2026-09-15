@@ -91,4 +91,14 @@ class StepViewModel(application: Application) : AndroidViewModel(application) {
             resetSession()
         }
     }
+
+    fun togglePauseResume() {
+        if (uiState.isPaused) {
+            StepEngineManager.resume()
+        } else {
+            StepEngineManager.pause()
+        }
+    }
+//    fun pauseSession() = StepEngineManager.pause()
+//    fun resumeSession() = StepEngineManager.resume()
 }

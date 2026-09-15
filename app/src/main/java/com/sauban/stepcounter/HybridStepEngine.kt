@@ -1,7 +1,6 @@
 package com.sauban.stepcounter
 
 import android.app.PendingIntent
-import android.os.Build
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -10,6 +9,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Build
 import com.google.android.gms.location.ActivityRecognition
 import com.google.android.gms.location.ActivityRecognitionClient
 import com.google.android.gms.location.ActivityTransition
@@ -23,11 +23,11 @@ import kotlinx.coroutines.flow.asStateFlow
 
 private const val TRANSITIONS_ACTION = "com.sauban.stepcounter.ACTIVITY_TRANSITION"
 private const val TRANSITIONS_REQUEST_CODE = 4210
+
 class HybridStepEngine : SensorEventListener {
     private var sensorManager: SensorManager? = null
     private var stepSensor: Sensor? = null
     private var activityRecognitionClient: ActivityRecognitionClient? = null
-    private var registeredContext: Context? = null
     private var pendingIntent: PendingIntent? = null
     private var receiver: BroadcastReceiver? = null
 
@@ -43,10 +43,12 @@ class HybridStepEngine : SensorEventListener {
 
     private var onUpdate: ((StepEngineState) -> Unit)? = null
 
+    @Volatile private var isPaused: Boolean = false
+
     fun start(context: Context, callback: (StepEngineState) -> Unit) {
+        val appContext = context.applicationContext
         onUpdate = callback
-        registeredContext = context.applicationContext
-        sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        sensorManager = appContext.getSystemService(Context.SENSOR_SERVICE) as SensorManager
         stepSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
 
         val activeSensor = stepSensor
@@ -58,7 +60,7 @@ class HybridStepEngine : SensorEventListener {
         }
 
         sensorManager?.registerListener(this, activeSensor, SensorManager.SENSOR_DELAY_UI)
-        registerActivityTransitions(registeredContext!!)
+        registerActivityTransitions(appContext)
         notifyState()
     }
 
@@ -77,6 +79,12 @@ class HybridStepEngine : SensorEventListener {
         lastRawTotal = total
         if (delta <= 0) return
 
+        if (isPaused) {
+            statusMessage = "Step counting paused"
+            notifyState()
+            return
+        }
+
         val isDriving = activityRecognitionReady && currentActivityType == DetectedActivity.IN_VEHICLE
 
         if (isDriving) {
@@ -91,6 +99,18 @@ class HybridStepEngine : SensorEventListener {
                 else -> "Counted $delta step(s) (motion confirmed)"
             }
         }
+        notifyState()
+    }
+
+    fun pause() {
+        isPaused = true
+        statusMessage = "Session paused"
+        notifyState()
+    }
+
+    fun resume() {
+        isPaused = false
+        statusMessage = "Session resumed"
         notifyState()
     }
 
@@ -168,38 +188,38 @@ class HybridStepEngine : SensorEventListener {
                     statusMessage = "Activity Recognition unavailable — using raw step counter"
                     notifyState()
                 }
-        } catch (e: SecurityException) {
+        } catch (_: SecurityException) {
             activityRecognitionAvailable = false
             statusMessage = "Missing ACTIVITY_RECOGNITION permission"
             notifyState()
         }
     }
 
-    fun stop() {
+    fun stop(context: Context) {
+        val appContext = context.applicationContext
+
         sensorManager?.unregisterListener(this)
-        registeredContext?.let { ctx ->
-            pendingIntent?.let { pi ->
-                try {
-                    activityRecognitionClient?.removeActivityTransitionUpdates(pi)
-                        ?.addOnFailureListener { /* Handle removal failure if needed */ }
-                } catch (e: SecurityException) {
-                    // Permission was revoked or is missing — safe to ignore or log
-                }
-            }
-            receiver?.let {
-                try {
-                    ctx.unregisterReceiver(it)
-                } catch (e: IllegalArgumentException) {
-                    // Already unregistered — safe to ignore
-                }
-            }
+        pendingIntent?.let { pi ->
+            try {
+                activityRecognitionClient?.removeActivityTransitionUpdates(pi)
+            } catch (_: SecurityException) { /* Safe to ignore */ }
         }
+        receiver?.let {
+            try {
+                appContext.unregisterReceiver(it)
+            } catch (_: IllegalArgumentException) { /* Safe to ignore */ }
+        }
+
+        // Clear all held references to prevent memory leaks
         receiver = null
         pendingIntent = null
+        activityRecognitionClient = null
+        sensorManager = null
+        stepSensor = null
+        onUpdate = null
     }
 
     fun resetSession() {
-        lastRawTotal = -1L
         sessionSteps = 0
         statusMessage = "Session reset"
         notifyState()
@@ -212,7 +232,8 @@ class HybridStepEngine : SensorEventListener {
                 statusMessage = statusMessage,
                 activityLabel = activityLabelFor(currentActivityType, activityRecognitionReady),
                 sensorPresent = sensorPresent,
-                activityRecognitionAvailable = activityRecognitionAvailable
+                activityRecognitionAvailable = activityRecognitionAvailable,
+                isPaused = isPaused
             )
         )
     }
@@ -230,8 +251,6 @@ class HybridStepEngine : SensorEventListener {
     }
 }
 
-
-
 object StepEngineManager {
     private val engine = HybridStepEngine()
 
@@ -247,6 +266,8 @@ object StepEngineManager {
         }
     }
 
+    fun pause() = engine.pause()
+    fun resume() = engine.resume()
     fun resetSession() = engine.resetSession()
-    fun stop() = engine.stop()
+    fun stop(context: Context) = engine.stop(context)
 }
