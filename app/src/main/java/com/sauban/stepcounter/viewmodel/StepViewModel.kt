@@ -1,10 +1,12 @@
 package com.sauban.stepcounter.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.sauban.stepcounter.StepEngineManager
@@ -20,14 +22,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 
+private const val PREFS_NAME = "step_counter_prefs"
+private const val KEY_SESSION_START_TIME = "key_session_start_time"
+
 class StepViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: StepRepository
+    private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     var uiState by mutableStateOf(StepEngineManager.currentState)
         private set
 
-    var currentSessionStartTime by mutableLongStateOf(System.currentTimeMillis())
+    var currentSessionStartTime by mutableLongStateOf(
+        prefs.getLong(KEY_SESSION_START_TIME, System.currentTimeMillis()).also { savedTime ->
+            if (!prefs.contains(KEY_SESSION_START_TIME)) {
+                prefs.edit { putLong(KEY_SESSION_START_TIME, savedTime) }
+            }
+        }
+    )
         private set
 
     val historySessions: StateFlow<List<StepSession>>
@@ -70,6 +82,7 @@ class StepViewModel(application: Application) : AndroidViewModel(application) {
 
         StepEngineManager.resetSession()
         currentSessionStartTime = now
+        prefs.edit { putLong(KEY_SESSION_START_TIME, now) }
     }
 
     fun deleteSession(session: StepSession) {

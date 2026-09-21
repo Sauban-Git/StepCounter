@@ -37,6 +37,7 @@ class HybridStepEngine : SensorEventListener {
 
     @Volatile private var currentActivityType: Int = DetectedActivity.UNKNOWN
     @Volatile private var activityRecognitionReady = false
+    @Volatile private var isRunning = false
 
     private var sensorPresent = true
     private var activityRecognitionAvailable = true
@@ -46,6 +47,8 @@ class HybridStepEngine : SensorEventListener {
     @Volatile private var isPaused: Boolean = false
 
     fun start(context: Context, callback: (StepEngineState) -> Unit) {
+        if (isRunning) return
+
         val appContext = context.applicationContext
         onUpdate = callback
         sensorManager = appContext.getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -61,6 +64,7 @@ class HybridStepEngine : SensorEventListener {
 
         sensorManager?.registerListener(this, activeSensor, SensorManager.SENSOR_DELAY_UI)
         registerActivityTransitions(appContext)
+        isRunning = true
         notifyState()
     }
 
@@ -77,6 +81,8 @@ class HybridStepEngine : SensorEventListener {
 
         val delta = (total - lastRawTotal).toInt()
         lastRawTotal = total
+
+        // Handle reboot / counter reset edge cases where total is smaller than last raw total
         if (delta <= 0) return
 
         if (isPaused) {
@@ -140,7 +146,10 @@ class HybridStepEngine : SensorEventListener {
 
         val request = ActivityTransitionRequest(transitions)
         val intent = Intent(TRANSITIONS_ACTION).setPackage(context.packageName)
+
+        // For minSdk 31 (Android 12+), FLAG_MUTABLE is always supported and required
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+
         val pi = PendingIntent.getBroadcast(context, TRANSITIONS_REQUEST_CODE, intent, flags)
         pendingIntent = pi
 
@@ -168,8 +177,10 @@ class HybridStepEngine : SensorEventListener {
         receiver = transitionReceiver
 
         val filter = IntentFilter(TRANSITIONS_ACTION)
+
+        // Android 13+ (API 33+) requires RECEIVER_EXPORTED for Google Play Services broadcasts
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(transitionReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            context.registerReceiver(transitionReceiver, filter, Context.RECEIVER_EXPORTED)
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             context.registerReceiver(transitionReceiver, filter)
@@ -210,7 +221,11 @@ class HybridStepEngine : SensorEventListener {
             } catch (_: IllegalArgumentException) { /* Safe to ignore */ }
         }
 
-        // Clear all held references to prevent memory leaks
+        lastRawTotal = -1L
+        isRunning = false
+        activityRecognitionReady = false
+        currentActivityType = DetectedActivity.UNKNOWN
+
         receiver = null
         pendingIntent = null
         activityRecognitionClient = null
@@ -221,6 +236,7 @@ class HybridStepEngine : SensorEventListener {
 
     fun resetSession() {
         sessionSteps = 0
+        lastRawTotal = -1L
         statusMessage = "Session reset"
         notifyState()
     }

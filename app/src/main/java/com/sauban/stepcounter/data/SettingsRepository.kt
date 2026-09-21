@@ -7,8 +7,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import androidx.core.content.edit
 
-
-class SettingsRepository(context: Context) {
+// 1. Made the constructor private
+class SettingsRepository private constructor(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("user_preferences", Context.MODE_PRIVATE)
 
@@ -35,5 +35,15 @@ class SettingsRepository(context: Context) {
     companion object {
         private const val KEY_DAILY_GOAL = "daily_step_goal"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
+
+        // 2. Added Singleton instance manager
+        @Volatile
+        private var INSTANCE: SettingsRepository? = null
+
+        fun getInstance(context: Context): SettingsRepository {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: SettingsRepository(context.applicationContext).also { INSTANCE = it }
+            }
+        }
     }
 }

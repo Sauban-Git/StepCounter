@@ -28,7 +28,7 @@ class StepCounterService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        settingsRepository = SettingsRepository(applicationContext)
+        settingsRepository = SettingsRepository.getInstance(applicationContext)
         createNotificationChannel()
         startForegroundNotification()
 
