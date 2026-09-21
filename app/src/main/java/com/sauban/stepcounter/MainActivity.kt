@@ -62,7 +62,7 @@ fun MainScreen() {
     val viewModel: StepViewModel = viewModel()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
 
-    val settingsRepository = remember { com.sauban.stepcounter.data.SettingsRepository(context) }
+    val settingsRepository = remember { com.sauban.stepcounter.data.SettingsRepository.getInstance(context) }
     val settingsViewModel: com.sauban.stepcounter.viewmodel.SettingsViewModel = viewModel(
         factory = com.sauban.stepcounter.viewmodel.SettingsViewModelFactory(settingsRepository)
     )

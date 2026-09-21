@@ -316,7 +316,7 @@ fun StatCard(title: String, value: String, modifier: Modifier = Modifier) {
 fun SessionGraph(sessions: List<StepSession>) {
     val maxSteps = max(sessions.maxOfOrNull { it.steps } ?: 1, 100)
 
-    val dateFormatter = SimpleDateFormat("MMM dd", LocalLocale.current.platformLocale)
+    val dateFormatter = remember { SimpleDateFormat("MMM dd", Locale.getDefault()) }
 
     Card(
         modifier = Modifier
