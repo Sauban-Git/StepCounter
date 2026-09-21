@@ -75,6 +75,7 @@ dependencies {
     implementation(libs.androidx.datastore.core)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.navigation:navigation-compose")
+    implementation("com.google.android.gms:play-services-location:21.0.1")
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.room3.common)
     implementation(libs.androidx.room3.runtime)
